@@ -50,7 +50,7 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}body.sidebar-hidden .ma
     <div class="top-actions">
       <button class="top-btn" id="globalSearchBtn">⌕ <span class="label-hide">PESQUISAR</span></button>
       <button class="top-btn" id="toolsBtn">☷ <span class="label-hide">FERRAMENTAS</span></button>
-      <button class="top-btn" id="syncBtn" type="button" onclick="openSyncModal()">☁ <span class="label-hide">SINCRONIZAR</span></button><button class="top-btn" id="backupBtn">⇩ <span class="label-hide">BACKUP</span></button>
+      <button class="top-btn" id="syncBtn" type="button" onclick="openSyncModal();return false" onpointerup="openSyncModal();return false" style="position:relative;z-index:99999;pointer-events:auto">☁ <span class="label-hide">SINCRONIZAR</span></button><button class="top-btn" id="backupBtn">⇩ <span class="label-hide">BACKUP</span></button>
     </div>
   </header>
   <section class="page" id="content"></section>
@@ -155,7 +155,38 @@ async function pullCloud(){const ses=getSession();if(!ses?.access_token)return f
 async function sendMagicLink(email){email=String(email||'').trim().toLowerCase();if(!email)return alert('INFORME SEU E-MAIL.');try{await api('/auth/v1/otp',{method:'POST',body:JSON.stringify({email,create_user:true,options:{emailRedirectTo:'https://regis1961-cloud.github.io/baire-impressora/'}})});alert('ENVIAMOS UM LINK DE ACESSO PARA '+email.toUpperCase()+'. ABRA O E-MAIL E CLIQUE NO LINK.')}catch(e){alert('NÃO FOI POSSÍVEL ENVIAR O LINK: '+e.message)}}
 function parseAuthCallback(){const h=new URLSearchParams(location.hash.replace(/^#/,''));const access_token=h.get('access_token'),refresh_token=h.get('refresh_token'),expires_in=h.get('expires_in'),token_type=h.get('token_type');if(access_token){localStorage.setItem(SESSION_KEY,JSON.stringify({access_token,refresh_token,expires_at:Date.now()+Number(expires_in||3600)*1000,token_type:token_type||'bearer'}));history.replaceState(null,'',location.pathname+location.search);return true}return false}
 function openSyncModal(){const ses=getSession();if(ses?.access_token){openModal(`<h2>SINCRONIZAÇÃO BAIRE</h2><p class="ok notice">Este aparelho está conectado ao banco online.</p><div class="actions"><button class="btn success" onclick="pushCloud(true);closeModal()">ENVIAR DADOS DESTE APARELHO</button><button class="btn" onclick="pullCloud().then(()=>location.reload())">BAIXAR DADOS DA NUVEM</button><button class="btn danger" onclick="localStorage.removeItem(SESSION_KEY);closeModal();setSyncStatus('SINCRONIZAÇÃO: AGUARDANDO LOGIN')">DESCONECTAR</button></div><p class="muted">Use ENVIAR apenas quando os dados deste aparelho forem os mais atuais.</p>`);return}openModal(`<h2>ENTRAR PARA SINCRONIZAR</h2><p>Informe seu e-mail. Você receberá um link de acesso sem senha.</p><label class="field"><span>E-MAIL</span><input id="syncEmail" type="email" autocomplete="email"></label><div class="modal-actions"><button class="btn" onclick="closeModal()">CANCELAR</button><button class="btn primary" onclick="sendMagicLink(document.getElementById('syncEmail').value)">ENVIAR LINK DE ACESSO</button></div>`)}
-document.getElementById('syncBtn') && (document.getElementById('syncBtn').onclick=openSyncModal);
+// Ligacao robusta do botao SINCRONIZAR, inclusive se o cabecalho for recriado.
+function bindSyncButton(){
+  const btn=document.getElementById('syncBtn');
+  if(!btn||btn.dataset.syncBound==='1')return;
+  btn.addEventListener('click',function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    openSyncModal();
+  });
+  btn.dataset.syncBound='1';
+}
+bindSyncButton();
+document.addEventListener('click',function(e){
+  const btn=e.target&&e.target.closest?e.target.closest('#syncBtn'):null;
+  if(!btn||btn.dataset.syncBound==='1')return;
+  e.preventDefault();
+  e.stopPropagation();
+  openSyncModal();
+},true);
+
+function forceSyncButtonActive(){
+  const b=document.getElementById('syncBtn');
+  if(!b)return;
+  b.style.position='relative';
+  b.style.zIndex='99999';
+  b.style.pointerEvents='auto';
+  b.onclick=function(e){if(e){e.preventDefault();e.stopPropagation()}openSyncModal();return false};
+  b.onpointerup=function(e){if(e){e.preventDefault();e.stopPropagation()}openSyncModal();return false};
+}
+forceSyncButtonActive();
+setTimeout(forceSyncButtonActive,250);
+setTimeout(forceSyncButtonActive,1000);
 async function initCloud(){const cb=parseAuthCallback();const ses=getSession();if(ses?.access_token){if(state.config?.legacyImportCompleted&&!state.config?.legacyImportPushed){setSyncStatus('ENVIANDO DADOS IMPORTADOS...');try{await pushCloud(false);state.config.legacyImportPushed=true;localSave();setSyncStatus('SINCRONIZADO NA NUVEM',true)}catch(e){setSyncStatus('ERRO DE SINCRONIZAÇÃO');console.error(e)}}else{setSyncStatus('CONECTADO — CARREGANDO...');const had=await pullCloud();if(cb&&had)location.reload();else if(had){try{showPage(currentPage)}catch{}}}}else setSyncStatus('SINCRONIZAÇÃO: AGUARDANDO LOGIN')}
 
 function digits(v){return String(v||'').replace(/\D/g,'')}
